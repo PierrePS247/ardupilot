@@ -101,6 +101,7 @@ public:
         AUTOROTATE =   26,  // Autonomous autorotation
         AUTO_RTL =     27,  // Auto RTL, this is not a true mode, AUTO will report as this mode if entered to perform a DO_LAND_START Landing sequence
         TURTLE =       28,  // Flip over after crash
+        PIERRE =       29,
 
         // Mode number 30 reserved for "offboard" for external/lua control.
 
@@ -1253,6 +1254,29 @@ protected:
 
     const char *name() const override { return "GUIDED_NOGPS"; }
     const char *name4() const override { return "GNGP"; }
+
+private:
+
+};
+
+class ModePierre : public ModeGuided {
+
+public:
+    // inherit constructor
+    using ModeGuided::Mode;
+    Number mode_number() const override { return Number::PIERRE; }
+
+    bool init(bool ignore_checks) override;
+    void run() override;
+
+    bool requires_GPS() const override { return false; }
+    bool has_manual_throttle() const override { return false; }
+    bool is_autopilot() const override { return true; }
+
+protected:
+
+    const char *name() const override { return "PIERRE"; }
+    const char *name4() const override { return "PRE"; }
 
 private:
 

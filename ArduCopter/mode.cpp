@@ -33,6 +33,8 @@ Mode *Copter::mode_from_mode_num(const Mode::Number mode)
 {
 
     switch (mode) {
+        case Mode::Number::PIERRE:
+            return &mode_pierre;
 #if MODE_ACRO_ENABLED
         case Mode::Number::ACRO:
             return &mode_acro;

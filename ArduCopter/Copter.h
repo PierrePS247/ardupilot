@@ -1031,6 +1031,7 @@ private:
     ModeAcro mode_acro;
 #endif
 #endif
+    ModePierre mode_pierre;
     ModeAltHold mode_althold;
 #if MODE_AUTO_ENABLED
     ModeAuto mode_auto;
