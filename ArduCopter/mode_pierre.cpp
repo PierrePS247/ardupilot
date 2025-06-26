@@ -11,7 +11,7 @@ bool ModePierre::init(bool ignore_checks)
     ModeGuided::angle_control_start();
     return true;
 }
-
+// comentario
 // guided_run - runs the guided controller
 // should be called at 100hz or more
 void ModePierre::run()
