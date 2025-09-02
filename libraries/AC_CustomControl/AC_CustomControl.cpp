@@ -9,6 +9,7 @@
 #include "AC_CustomControl_PID.h"
 #include <GCS_MAVLink/GCS.h>
 #include <AP_Logger/AP_Logger.h>
+#include "AC_CustomControl_Q.h"
 
 // table of user settable parameters
 const AP_Param::GroupInfo AC_CustomControl::var_info[] = {
@@ -32,6 +33,9 @@ const AP_Param::GroupInfo AC_CustomControl::var_info[] = {
 
     // parameters for PID controller
     AP_SUBGROUPVARPTR(_backend, "2_", 7, AC_CustomControl, _backend_var_info[1]),
+
+    // parameters for Q controller
+    AP_SUBGROUPVARPTR(_backend, "3_", 8, AC_CustomControl, _backend_var_info[2]),
 
     AP_GROUPEND
 };
@@ -61,6 +65,10 @@ void AC_CustomControl::init(void)
         case CustomControlType::CONT_PID:
             _backend = NEW_NOTHROW AC_CustomControl_PID(*this, _ahrs, _att_control, _motors, _dt);
             _backend_var_info[get_type()] = AC_CustomControl_PID::var_info;
+            break;
+        case CustomControlType::CONT_Q:
+            _backend = NEW_NOTHROW AC_CustomControl_Q(*this, _ahrs, _att_control, _motors, _dt);
+            _backend_var_info[get_type()] = AC_CustomControl_Q::var_info;
             break;
         default:
             return;
