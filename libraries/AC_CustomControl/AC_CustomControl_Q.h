@@ -27,6 +27,10 @@ protected:
     AP_Float Gam_x,   Gam_y,   Gam_z;    // Gamma diagonal
     AP_Float beta;                        // escalar
 
+    Quaternion qbn_ant;
+    Quaternion qd_ant;
+    bool qflag;
+
     // ===== Inercias =====
     AP_Float Ixx, Iyy, Izz;
 
@@ -40,6 +44,11 @@ protected:
 
     // <<< NUEVO: dt local del controlador >>>
     float    dt_s = 0.0f;
+
+    // === logging state ===
+    bool    log_enabled = false;    // activamos tras despegar
+    uint32_t last_log_us = 0;       // para rate-limit
+
 
     inline Vector3f tanh_vec(const Vector3f& v) const {
         return Vector3f(tanf(v.x), tanf(v.y), tanf(v.z));
