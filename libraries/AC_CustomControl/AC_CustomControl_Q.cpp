@@ -6,15 +6,16 @@
 #include <GCS_MAVLink/GCS.h>
 #include <cmath>
 #include <AP_Logger/AP_Logger.h>  
+#include <AP_HAL/Semaphores.h>
 
 // -------------------------
 // Tabla de parámetros
 // -------------------------
 const AP_Param::GroupInfo AC_CustomControl_Q::var_info[] = {
     // Kd
-    AP_GROUPINFO("KDX",   1, AC_CustomControl_Q, Kd_x,   0.2f), 
-    AP_GROUPINFO("KDY",   2, AC_CustomControl_Q, Kd_y,   0.2f), 
-    AP_GROUPINFO("KDZ",   3, AC_CustomControl_Q, Kd_z,   0.2f), 
+    AP_GROUPINFO("KDX",   1, AC_CustomControl_Q, Kd_x,   0.24f), 
+    AP_GROUPINFO("KDY",   2, AC_CustomControl_Q, Kd_y,   0.24f), 
+    AP_GROUPINFO("KDZ",   3, AC_CustomControl_Q, Kd_z,   0.24f), 
 
     // Alpha
     AP_GROUPINFO("ALPX",  4, AC_CustomControl_Q, Alp_x, 3.0f),
@@ -28,21 +29,6 @@ const AP_Param::GroupInfo AC_CustomControl_Q::var_info[] = {
 
     // beta
     AP_GROUPINFO("BETA", 10, AC_CustomControl_Q, beta,   0.0000f),
-
-    // Inercias
-    AP_GROUPINFO("IXX",  11, AC_CustomControl_Q, Ixx,    0.004856f),
-    AP_GROUPINFO("IYY",  12, AC_CustomControl_Q, Iyy,    0.004856f),
-    AP_GROUPINFO("IZZ",  13, AC_CustomControl_Q, Izz,    0.008801f),
-
-    // Límites de tasa (rad/s)
-    AP_GROUPINFO("RLIMX",14, AC_CustomControl_Q, rlim_x, radians(220.0f)),//antes la mitad
-    AP_GROUPINFO("RLIMY",15, AC_CustomControl_Q, rlim_y, radians(220.0f)),//
-    AP_GROUPINFO("RLIMZ",16, AC_CustomControl_Q, rlim_z, radians(200.0f)),//
-
-    // Límites de aceleración angular (rad/s^2)
-    AP_GROUPINFO("DLIMX",17, AC_CustomControl_Q, dlim_x, 1000.0f),//
-    AP_GROUPINFO("DLIMY",18, AC_CustomControl_Q, dlim_y, 1000.0f),//
-    AP_GROUPINFO("DLIMZ",19, AC_CustomControl_Q, dlim_z, 800.0f),//
 
     AP_GROUPEND
 };
@@ -62,7 +48,10 @@ AC_CustomControl_Q::AC_CustomControl_Q(AC_CustomControl& frontend,
     dt_s = dt; 
     qbn_ant = Quaternion(1,0,0,0);
     qd_ant = Quaternion(1,0,0,0);
+    qdx = Quaternion(1,0,0,0);
+    qdy = Quaternion(1,0,0,0);
     qflag = false;
+    t0_us = AP_HAL::micros64();////
 }
 
 // -------------------------
@@ -72,6 +61,13 @@ void AC_CustomControl_Q::reset(void)
 {
     omega_cmd.zero();
     first_run = true;
+    t0_us = AP_HAL::micros64();
+}
+
+Quaternion AC_CustomControl_Q::qconj(const Quaternion& q)
+{
+    Quaternion r{q.q1, -q.q2, -q.q3, -q.q4};
+    return r;
 }
 
 // -------------------------
@@ -86,32 +82,97 @@ Vector3f AC_CustomControl_Q::update(void)
     Vector3f omega_b = _ahrs->get_gyro_latest();  // rad/s
     
     // Referencias deseadas (tu modo de vuelo las fija)
-    //Quaternion qd_bn = _att_control->get_attitude_target_quat();
-    Quaternion qd_bn = _att_control->get_attitude_target_quat();
-    Vector3f  omega_d = _att_control->get_attitude_target_ang_vel();
+    ////Quaternion qd_bn = _att_control->get_attitude_target_quat();
+    ////Vector3f  omega_d = _att_control->get_attitude_target_ang_vel();
+
+    const float t = (AP_HAL::micros64() - t0_us) * 1.0e-6f;  // [s]
+
+    // ángulos y derivadas  
+    const float phi     = 0.5f * sinf(alpha * t);                 // φ(t)
+    const float theta   = 0.5f * sinf(betaa  * t);                 // θ(t)
+    const float phi_dot = 0.5f * alpha * cosf(alpha * t);         // φ̇(t)
+    const float th_dot  = 0.5f * betaa * cosf(betaa  * t);   // θ̇(t)  
+
+    const float hphi   = 0.5f * phi;
+    const float htheta = 0.5f * theta;
+
+    // qdx: rotación sobre X por φ
+    qdx.q1 = cosf(hphi);
+    qdx.q2 = sinf(hphi);
+    qdx.q3 = 0.0f;
+    qdx.q4 = 0.0f;
+    qdx.normalize();
+
+    // qdy: rotación sobre Y por θ
+    qdy.q1 = cosf(htheta);
+    qdy.q2 = 0.0f;
+    qdy.q3 = sinf(htheta);
+    qdy.q4 = 0.0f;
+    qdy.normalize();
+
+    // derivadas q̇dx y q̇dy
+    Quaternion qdx_dot;
+    qdx_dot.q1 = -0.5f * phi_dot * sinf(hphi);
+    qdx_dot.q2 =  0.5f * phi_dot * cosf(hphi);
+    qdx_dot.q3 =  0.0f;
+    qdx_dot.q4 =  0.0f;
+
+    Quaternion qdy_dot;
+    qdy_dot.q1 = -0.5f * th_dot * sinf(htheta);
+    qdy_dot.q2 =  0.0f;
+    qdy_dot.q3 =  0.5f * th_dot * cosf(htheta);
+    qdy_dot.q4 =  0.0f;
+
+    // producto qdmul = qdx ⊗ qdy  y su derivada
+    ////qdmul    = qmul(qdx, qdy);
+    ////const Quaternion term1    = qmul(qdx_dot, qdy);
+    ////const Quaternion term2    = qmul(qdx,     qdy_dot);
+    // qdmul    = qdx * qdy;
+    // const Quaternion term1    = qdx_dot * qdy;
+    // const Quaternion term2    = qdx * qdy_dot;
+    // Quaternion qdmul_dot { term1.q1 + term2.q1,
+    //                        term1.q2 + term2.q2,
+    //                        term1.q3 + term2.q3,
+    //                        term1.q4 + term2.q4 };
+
+    // ======== ELEGIR UNO ========
+    qd = qdx;      Quaternion qd_dot = qdx_dot;      // sólo rotación en X (φ)
+    // qd = qdy;      Quaternion qd_dot = qdy_dot;      // sólo rotación en Y (θ)
+    //qd = qdmul;       Quaternion qd_dot = qdmul_dot;    // composición qdx ⊗ qdy
+    // =============================================================
+
+    // ω_d consistente con qd elegido:  Ω = 2 * (q* ⊗ q̇), Ω=[0, ω]
+    ///////const Quaternion tmp = qmul(qconj(qd), qd_dot);
+    const Quaternion tmp = qconj(qd) * qd_dot;
+    omegad.x = 2.0f * tmp.q2;
+    omegad.y = 2.0f * tmp.q3;
+    omegad.z = 2.0f * tmp.q4;
+
+    omega_d = omegad;////////////////
+    qd_bn = qd;/////////////////
     qd_bn.normalize();
     q_bn.normalize();
     
-    if (!qflag){
-        qbn_ant = q_bn;
-        qd_ant = qd_bn;
-        qflag = true;
-    }
+    // if (!qflag){
+    //     qbn_ant = q_bn;
+    //     qd_ant = qd_bn;
+    //     qflag = true;
+    // }
 
-    if (qbn_ant.q1 * q_bn.q1 + qbn_ant.q2 * q_bn.q2 + qbn_ant.q3 * q_bn.q3 + qbn_ant.q4 * q_bn.q4 < 0.0){
-        q_bn.q1 = -q_bn.q1;
-        q_bn.q2 = -q_bn.q2;
-        q_bn.q3 = -q_bn.q3;
-        q_bn.q4 = -q_bn.q4;
+    // if (qbn_ant.q1 * q_bn.q1 + qbn_ant.q2 * q_bn.q2 + qbn_ant.q3 * q_bn.q3 + qbn_ant.q4 * q_bn.q4 < 0.0){
+    //     q_bn.q1 = -q_bn.q1;
+    //     q_bn.q2 = -q_bn.q2;
+    //     q_bn.q3 = -q_bn.q3;
+    //     q_bn.q4 = -q_bn.q4;
 
-    }
+    // }
 
-    if (qd_ant.q1 * qd_bn.q1 + qd_ant.q2 * qd_bn.q2 + qd_ant.q3 * qd_bn.q3 + qd_ant.q4 * qd_bn.q4 < 0.0){
-        qd_bn.q1 = -qd_bn.q1;
-        qd_bn.q2 = -qd_bn.q2;
-        qd_bn.q3 = -qd_bn.q3;
-        qd_bn.q4 = -qd_bn.q4;
-    }
+    // if (qd_ant.q1 * qd_bn.q1 + qd_ant.q2 * qd_bn.q2 + qd_ant.q3 * qd_bn.q3 + qd_ant.q4 * qd_bn.q4 < 0.0){
+    //     qd_bn.q1 = -qd_bn.q1;
+    //     qd_bn.q2 = -qd_bn.q2;
+    //     qd_bn.q3 = -qd_bn.q3;
+    //     qd_bn.q4 = -qd_bn.q4;
+    // }
 
 
     // Error de cuaternión: qe = qd^{-1} * q
@@ -127,7 +188,7 @@ Vector3f AC_CustomControl_Q::update(void)
     const float kdx = Kd_x.get(), kdy = Kd_y.get(), kdz = Kd_z.get();
     const float ax  = Alp_x.get(), ay  = Alp_y.get(), az  = Alp_z.get();
     const float gx  = Gam_x.get(), gy  = Gam_y.get(), gz  = Gam_z.get();
-    const float beta_v = beta.get();
+    ////const float beta_v = beta.get();
 
     // Reconstruir vectores
     const Vector3f Alpha(ax, ay, az);
@@ -146,9 +207,14 @@ Vector3f AC_CustomControl_Q::update(void)
 
     // Ley de control (componente a componente):
     // tau_i =  s_r_i-Kd_i * - beta * nonlin_i
-    Vector3f tau( -kdx * s_r.x - beta_v * nonlin.x,
-                -kdy * s_r.y - beta_v * nonlin.y,
-                -kdz * s_r.z - beta_v * nonlin.z );
+    Vector3f tau( -kdx * s_r.x - beta * nonlin.x,
+                 -kdy * s_r.y - beta * nonlin.y,
+                 -kdz * s_r.z - beta * nonlin.z );
+
+                 //Para lazo abierto
+    //Vector3f tau( -kdx * omega_b.x -1.84 * q_bn.q2 ,
+    //            -kdy * omega_b.y -1.84 * q_bn.q3 + 0.5* qd_bn.q3,
+    //            -kdz * omega_b.z -1.84 * q_bn.q4 );
 
 
     // ===== LOGGING SEGURO (50 Hz), DESPUÉS DE CALCULAR q_bn, omega_b, tau, etc. =====
@@ -224,12 +290,48 @@ Vector3f AC_CustomControl_Q::update(void)
                 (float)(omega_b.y - omega_d.y),
                 (float)(omega_b.z - omega_d.z)
             );
+
+            // quaternion deseado
+            AP::logger().Write(
+                "ZQD",
+                "TimeUS,qd1,qd2,qd3,qd4",   // labels
+                "Qffff",                // 1x uint64 + 4x float
+                t64,
+                (float)qd_bn.q1, (float)qd_bn.q2, (float)qd_bn.q3, (float)qd_bn.q4
+            );
+
+            //   velocidad angular deseada
+            AP::logger().Write(
+                "ZWD",
+                "TimeUS,wdx,wdy,wdz",
+                "Qfff",
+                t64,
+                (float)omega_d.x, (float)omega_d.y, (float)omega_d.z
+            );
+
+            //             // quaternion deseado
+            // AP::logger().Write(
+            //     "ZQDe",
+            //     "TimeUS,qde1,qde2,qde3,qde4",   // labels
+            //     "Qffff",                // 1x uint64 + 4x float
+            //     t64,
+            //     (float)qd.q1, (float)qd.q2, (float)qd.q3, (float)qd.q4
+            // );
+
+            // //   velocidad angular deseada
+            // AP::logger().Write(
+            //     "ZWDe",
+            //     "TimeUS,wdex,wdey,wdez",
+            //     "Qfff",
+            //     t64,
+            //     (float)omegad.x, (float)omegad.y, (float)omegad.z
+            // );
         }
     }
     #endif  // HAL_LOGGING_ENABLED
     
-    qd_ant = qd_bn;
-    qbn_ant = q_bn;
+    // qd_ant = qd_bn;
+    // qbn_ant = q_bn;
 
     return tau;
     

@@ -2,6 +2,9 @@
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 #include <AP_Scheduler/AP_Scheduler.h>
+#include <GCS_MAVLink/GCS.h>
+#include <iostream>
+#include <AP_Logger/AP_Logger.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -308,6 +311,8 @@ void AC_AttitudeControl::input_quaternion(Quaternion& attitude_desired_quat, Vec
     // Limit the angular velocity
     ang_vel_limit(ang_vel_body_rads, radians(_ang_vel_roll_max_degs), radians(_ang_vel_pitch_max_degs), radians(_ang_vel_yaw_max_degs));
     Vector3f ang_vel_target = attitude_desired_quat * ang_vel_body_rads;
+
+gcs().send_text(MAV_SEVERITY_CRITICAL, "rate_bf_ff_enabled=%d", (int)_rate_bf_ff_enabled);
 
     if (_rate_bf_ff_enabled) {
         Quaternion attitude_error_quat = _attitude_target.inverse() * attitude_desired_quat;

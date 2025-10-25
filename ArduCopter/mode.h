@@ -1259,19 +1259,35 @@ private:
 
 };
 
-class ModePierre : public ModeGuided {
+class ModePierre : public Mode {
 
 public:
     // inherit constructor
-    using ModeGuided::Mode;
-    Number mode_number() const override { return Number::PIERRE; }
+    // using ModeGuided::Mode;
+    // Number mode_number() const override { return Number::PIERRE; }
 
+    // bool init(bool ignore_checks) override;
+    // void run() override;
+
+    // bool requires_GPS() const override { return false; }
+    // bool has_manual_throttle() const override { return false; }
+    // bool is_autopilot() const override { return true; }
+
+    // ModeLLC(void);
+    // // inherit constructor
+    using Mode::Mode;
+    Number mode_number() const override { return Number::PIERRE; }
     bool init(bool ignore_checks) override;
+    void exit() override;
     void run() override;
 
     bool requires_GPS() const override { return false; }
     bool has_manual_throttle() const override { return false; }
-    bool is_autopilot() const override { return true; }
+    bool allows_arming(AP_Arming::Method method) const override { return true; };
+    bool is_autopilot() const override { return false; }
+    bool allows_save_trim() const override { return true; }
+    bool allows_autotune() const override { return true; }
+    bool allows_flip() const override { return true; }
 
 protected:
 
@@ -1279,7 +1295,10 @@ protected:
     const char *name4() const override { return "PRE"; }
 
 private:
-
+    Quaternion qdx, qdy, qdmul, qd;
+    Vector3f   omegad;
+    float      alpha{1.0f}, beta{1.0f};   // defaults ≠ 0
+    uint64_t   t0_us{0};
 };
 
 

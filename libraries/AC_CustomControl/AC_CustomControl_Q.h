@@ -17,6 +17,7 @@ public:
 
     Vector3f update(void) override;
     void reset(void) override;
+    Quaternion qconj(const Quaternion& q);
 
     static const struct AP_Param::GroupInfo var_info[];
 
@@ -29,7 +30,17 @@ protected:
 
     Quaternion qbn_ant;
     Quaternion qd_ant;
+    Quaternion qdx;
+    Quaternion qdy;
+    Quaternion qmul;
+    Quaternion qdmul;
+    Quaternion qd;
+    Vector3f   omegad;
+    Vector3f   omega_d;
+    Quaternion qd_bn;
     bool qflag;
+    uint64_t   t0_us{0};//////
+    float      alpha{1.0f}, betaa{1.0f};///////
 
     // ===== Inercias =====
     AP_Float Ixx, Iyy, Izz;
