@@ -198,7 +198,7 @@ Vector3f AC_CustomControl_Q::update(void)
     // Superficie s_r = (omega - omega_d) + Alpha * qe_v
     Vector3f s_r = omega_e + Vector3f(Alpha.x * qe_v.x,
                                     Alpha.y * qe_v.y,
-                                    Alpha.z * qe_v.z);
+                                    -Alpha.z * qe_v.z);
 
     // No lineal: tanh(Gamma ∘ s_r)  (∘ = producto elemento a elemento)
     Vector3f nonlin = tanh_vec(Vector3f(Gam.x * s_r.x,
@@ -209,7 +209,7 @@ Vector3f AC_CustomControl_Q::update(void)
     // tau_i =  s_r_i-Kd_i * - beta * nonlin_i
     Vector3f tau( -kdx * s_r.x - beta * nonlin.x,
                  -kdy * s_r.y - beta * nonlin.y,
-                 -kdz * s_r.z - beta * nonlin.z );
+                 kdz * s_r.z - beta * nonlin.z );
 
                  //Para lazo abierto
     //Vector3f tau( -kdx * omega_b.x -1.84 * q_bn.q2 ,
