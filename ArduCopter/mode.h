@@ -1297,7 +1297,7 @@ protected:
 private:
     Quaternion qdx, qdy, qdmul, qd;
     Vector3f   omegad;
-    float      alpha{1.0f}, beta{1.0f};   // defaults ≠ 0
+    float      alpha{1.0f}, betaa{1.0f};   // defaults ≠ 0
     uint64_t   t0_us{0};
 };
 

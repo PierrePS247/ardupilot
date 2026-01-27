@@ -13,14 +13,14 @@
 // -------------------------
 const AP_Param::GroupInfo AC_CustomControl_Q::var_info[] = {
     // Kd
-    AP_GROUPINFO("KDX",   1, AC_CustomControl_Q, Kd_x,   0.24f), 
-    AP_GROUPINFO("KDY",   2, AC_CustomControl_Q, Kd_y,   0.24f), 
-    AP_GROUPINFO("KDZ",   3, AC_CustomControl_Q, Kd_z,   0.24f), 
+    AP_GROUPINFO("KDX",   1, AC_CustomControl_Q, Kd_x,   0.23f), 
+    AP_GROUPINFO("KDY",   2, AC_CustomControl_Q, Kd_y,   0.23f), 
+    AP_GROUPINFO("KDZ",   3, AC_CustomControl_Q, Kd_z,   0.23f), 
 
     // Alpha
-    AP_GROUPINFO("ALPX",  4, AC_CustomControl_Q, Alp_x, 3.0f),
-    AP_GROUPINFO("ALPY",  5, AC_CustomControl_Q, Alp_y, 3.0f),         
-    AP_GROUPINFO("ALPZ",  6, AC_CustomControl_Q, Alp_z, 3.0f),         
+    AP_GROUPINFO("ALPX",  4, AC_CustomControl_Q, Alp_x, 8.0f),
+    AP_GROUPINFO("ALPY",  5, AC_CustomControl_Q, Alp_y, 8.0f),         
+    AP_GROUPINFO("ALPZ",  6, AC_CustomControl_Q, Alp_z, 8.0f),         
 
     // Gamma
     AP_GROUPINFO("GMX",   7, AC_CustomControl_Q, Gam_x, 0.000245f),
@@ -46,10 +46,10 @@ AC_CustomControl_Q::AC_CustomControl_Q(AC_CustomControl& frontend,
     AP_Param::setup_object_defaults(this, var_info);
     omega_cmd = Vector3f(0,0,0);
     dt_s = dt; 
-    qbn_ant = Quaternion(1,0,0,0);
-    qd_ant = Quaternion(1,0,0,0);
-    qdx = Quaternion(1,0,0,0);
-    qdy = Quaternion(1,0,0,0);
+    //qbn_ant = Quaternion(1,0,0,0);
+    //qd_ant = Quaternion(1,0,0,0);
+    //qdx = Quaternion(1,0,0,0);
+    //qdy = Quaternion(1,0,0,0);
     qflag = false;
     t0_us = AP_HAL::micros64();////
 }
@@ -77,79 +77,18 @@ Vector3f AC_CustomControl_Q::update(void)
 {
     // Estados actuales
     Quaternion q_bn;                             // cuerpo->NED
-    _ahrs->get_quat_body_to_ned(q_bn);          // <-- En tu rama esta es la que existe
+    _ahrs->get_quat_body_to_ned(q_bn);  //me estoy quedando en frame NED        // <-- En tu rama esta es la que existe
+    //_ahrs->get_quaternion(q_bn); //////////////////////////////////////////////////////
+    //// return the quaternion defining the rotation from NED to XYZ (body) axes
     
     Vector3f omega_b = _ahrs->get_gyro_latest();  // rad/s
+
     
     // Referencias deseadas (tu modo de vuelo las fija)
-    ////Quaternion qd_bn = _att_control->get_attitude_target_quat();
-    ////Vector3f  omega_d = _att_control->get_attitude_target_ang_vel();
+    Quaternion qd_bn = _att_control->get_attitude_target_quat(); // This represents the desired orientation in NED earth frame.
+    Vector3f  omega_d = _att_control->get_attitude_target_ang_vel(); // Return the angular velocity of the target (setpoint) [rad/s] in the target attitude frame
 
-    const float t = (AP_HAL::micros64() - t0_us) * 1.0e-6f;  // [s]
 
-    // ángulos y derivadas  
-    const float phi     = 0.5f * sinf(alpha * t);                 // φ(t)
-    const float theta   = 0.5f * sinf(betaa  * t);                 // θ(t)
-    const float phi_dot = 0.5f * alpha * cosf(alpha * t);         // φ̇(t)
-    const float th_dot  = 0.5f * betaa * cosf(betaa  * t);   // θ̇(t)  
-
-    const float hphi   = 0.5f * phi;
-    const float htheta = 0.5f * theta;
-
-    // qdx: rotación sobre X por φ
-    qdx.q1 = cosf(hphi);
-    qdx.q2 = sinf(hphi);
-    qdx.q3 = 0.0f;
-    qdx.q4 = 0.0f;
-    qdx.normalize();
-
-    // qdy: rotación sobre Y por θ
-    qdy.q1 = cosf(htheta);
-    qdy.q2 = 0.0f;
-    qdy.q3 = sinf(htheta);
-    qdy.q4 = 0.0f;
-    qdy.normalize();
-
-    // derivadas q̇dx y q̇dy
-    Quaternion qdx_dot;
-    qdx_dot.q1 = -0.5f * phi_dot * sinf(hphi);
-    qdx_dot.q2 =  0.5f * phi_dot * cosf(hphi);
-    qdx_dot.q3 =  0.0f;
-    qdx_dot.q4 =  0.0f;
-
-    Quaternion qdy_dot;
-    qdy_dot.q1 = -0.5f * th_dot * sinf(htheta);
-    qdy_dot.q2 =  0.0f;
-    qdy_dot.q3 =  0.5f * th_dot * cosf(htheta);
-    qdy_dot.q4 =  0.0f;
-
-    // producto qdmul = qdx ⊗ qdy  y su derivada
-    ////qdmul    = qmul(qdx, qdy);
-    ////const Quaternion term1    = qmul(qdx_dot, qdy);
-    ////const Quaternion term2    = qmul(qdx,     qdy_dot);
-    // qdmul    = qdx * qdy;
-    // const Quaternion term1    = qdx_dot * qdy;
-    // const Quaternion term2    = qdx * qdy_dot;
-    // Quaternion qdmul_dot { term1.q1 + term2.q1,
-    //                        term1.q2 + term2.q2,
-    //                        term1.q3 + term2.q3,
-    //                        term1.q4 + term2.q4 };
-
-    // ======== ELEGIR UNO ========
-    qd = qdx;      Quaternion qd_dot = qdx_dot;      // sólo rotación en X (φ)
-    // qd = qdy;      Quaternion qd_dot = qdy_dot;      // sólo rotación en Y (θ)
-    //qd = qdmul;       Quaternion qd_dot = qdmul_dot;    // composición qdx ⊗ qdy
-    // =============================================================
-
-    // ω_d consistente con qd elegido:  Ω = 2 * (q* ⊗ q̇), Ω=[0, ω]
-    ///////const Quaternion tmp = qmul(qconj(qd), qd_dot);
-    const Quaternion tmp = qconj(qd) * qd_dot;
-    omegad.x = 2.0f * tmp.q2;
-    omegad.y = 2.0f * tmp.q3;
-    omegad.z = 2.0f * tmp.q4;
-
-    omega_d = omegad;////////////////
-    qd_bn = qd;/////////////////
     qd_bn.normalize();
     q_bn.normalize();
     
@@ -198,7 +137,7 @@ Vector3f AC_CustomControl_Q::update(void)
     // Superficie s_r = (omega - omega_d) + Alpha * qe_v
     Vector3f s_r = omega_e + Vector3f(Alpha.x * qe_v.x,
                                     Alpha.y * qe_v.y,
-                                    -Alpha.z * qe_v.z);
+                                    Alpha.z * qe_v.z);
 
     // No lineal: tanh(Gamma ∘ s_r)  (∘ = producto elemento a elemento)
     Vector3f nonlin = tanh_vec(Vector3f(Gam.x * s_r.x,
@@ -209,7 +148,7 @@ Vector3f AC_CustomControl_Q::update(void)
     // tau_i =  s_r_i-Kd_i * - beta * nonlin_i
     Vector3f tau( -kdx * s_r.x - beta * nonlin.x,
                  -kdy * s_r.y - beta * nonlin.y,
-                 kdz * s_r.z - beta * nonlin.z );
+                 -kdz * s_r.z - beta * nonlin.z );
 
                  //Para lazo abierto
     //Vector3f tau( -kdx * omega_b.x -1.84 * q_bn.q2 ,
@@ -309,23 +248,6 @@ Vector3f AC_CustomControl_Q::update(void)
                 (float)omega_d.x, (float)omega_d.y, (float)omega_d.z
             );
 
-            //             // quaternion deseado
-            // AP::logger().Write(
-            //     "ZQDe",
-            //     "TimeUS,qde1,qde2,qde3,qde4",   // labels
-            //     "Qffff",                // 1x uint64 + 4x float
-            //     t64,
-            //     (float)qd.q1, (float)qd.q2, (float)qd.q3, (float)qd.q4
-            // );
-
-            // //   velocidad angular deseada
-            // AP::logger().Write(
-            //     "ZWDe",
-            //     "TimeUS,wdex,wdey,wdez",
-            //     "Qfff",
-            //     t64,
-            //     (float)omegad.x, (float)omegad.y, (float)omegad.z
-            // );
         }
     }
     #endif  // HAL_LOGGING_ENABLED

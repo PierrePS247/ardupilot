@@ -1,5 +1,4 @@
 #include "Copter.h"
-#include <AP_Logger/AP_Logger.h>  
 
 /*
  * Init and run calls for guided_nogps flight mode
@@ -71,10 +70,10 @@ void ModePierre::run()
     const float t = (AP_HAL::micros64() - t0_us) * 1.0e-6f;  // [s]
 
     // ángulos y derivadas  
-    const float phi     = sinf(alpha * t);                 // φ(t)
-    const float theta   = sinf(beta  * t);                 // θ(t)
-    const float phi_dot = alpha * cosf(alpha * t);         // φ̇(t)
-    const float th_dot  = beta * cosf(beta  * t);   // θ̇(t)  
+    const float phi     = 0.5f * sinf(alpha * t);                 // φ(t)
+    const float theta   = 0.5f * sinf(betaa  * t);                 // θ(t)
+    const float phi_dot = 0.5f * alpha * cosf(alpha * t);         // φ̇(t)
+    const float th_dot  = 0.5f * betaa * cosf(betaa  * t);   // θ̇(t)  
 
     const float hphi   = 0.5f * phi;
     const float htheta = 0.5f * theta;
@@ -120,8 +119,8 @@ void ModePierre::run()
 
     // ======== ELEGIR UNO ========
     // qd = qdx;      Quaternion qd_dot = qdx_dot;      // sólo rotación en X (φ)
-    qd = qdy;      Quaternion qd_dot = qdy_dot;      // sólo rotación en Y (θ)
-    //qd = qdmul;       Quaternion qd_dot = qdmul_dot;    // composición qdx ⊗ qdy
+    //qd = qdy;      Quaternion qd_dot = qdy_dot;      // sólo rotación en Y (θ)
+    qd = qdmul;       Quaternion qd_dot = qdmul_dot;    // composición qdx ⊗ qdy
     // =============================================================
 
     // ω_d consistente con qd elegido:  Ω = 2 * (q* ⊗ q̇), Ω=[0, ω]
@@ -131,20 +130,7 @@ void ModePierre::run()
     omegad.y = 2.0f * tmp.q3;
     omegad.z = 2.0f * tmp.q4;
 
-    AP::logger().Write(
-                "ZQP",                 // nombre corto (4 chars)
-                "TimeUS,qd1,qd2,qd3,qd4",   // labels
-                "Qffff",  
-                AP_HAL::micros64(),              // 1x uint64 + 4x float
-                (float)qd.q1, (float)qd.q2, (float)qd.q3, (float)qd.q4
-            );
-    // AP::logger().Write(
-    //             "ZQt",                 // nombre corto (4 chars)
-    //             "TimeUS,htheta",   // labels
-    //             "Qf",                // 1x uint64 + 4x float
-    //             AP_HAL::micros64(),
-    //             (float)htheta
-    //         );
+    qd.normalize();
 
 
         // Handle motor spool states
