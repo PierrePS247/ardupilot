@@ -26,6 +26,7 @@
 #include <AP_ADSB/AP_ADSB.h>
 #include <AP_AdvancedFailsafe/AP_AdvancedFailsafe.h>
 #include <AP_AHRS/AP_AHRS.h>
+#include "ekf_target.h" //
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Arming/AP_Arming.h>
 #include <AP_InternalError/AP_InternalError.h>
@@ -4553,6 +4554,7 @@ void GCS_MAVLINK::handle_message(const mavlink_message_t &msg)
 
     case MAVLINK_MSG_ID_NAMED_VALUE_FLOAT:
         handle_named_value(msg);
+        EKFTarget::handle_named_value_float(msg); // <-- TU hook extra
         break;
 
 #if HAL_CANMANAGER_ENABLED
